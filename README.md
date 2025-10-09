@@ -39,14 +39,6 @@ Apart from the conda env, we use `Blender` to get novel views during test time. 
 ## MANUS-Grasps Dataset
 Please check [Dataset.md](Dataset.md) to get dataset information. 
 
-Download small batch of dataset from [here](https://drive.google.com/drive/folders/15ihoMdU0PFUNkJSJxBpdrMy1lNT7fASu?usp=sharing)
-
-```
-import gdown
-gdown.download_folder(url = {url})
-```
-
-
 ## Optimization
 
 To optimize object module on our dataset. 
