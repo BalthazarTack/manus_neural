@@ -362,6 +362,14 @@ class BaseTrainingModule(LightningModule):
 
             losses.isotropic_reg = isotropic_loss
 
+        if "freq_amp_reg" in losses_dict:
+            # Penalize large amplitudes (L1) to encourage sparsity
+            amp_reg = torch.mean(torch.abs(self.model.get_amplitudes))
+            # Penalize high frequencies (L2) to smooth the local implicit surfaces
+            freq_reg = torch.mean(torch.square(self.model.get_frequencies))
+            
+            losses.freq_amp_reg = (0.01 * amp_reg) + (0.001 * freq_reg)
+
         final_loss = 0
         for name, loss in losses.items():
             if log_losses:

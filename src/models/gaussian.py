@@ -1242,6 +1242,11 @@ class GaussianModelMLP_HB(torch.nn.Module):
             info_filtered["grads"] < min_grad_prune, info_filtered["denom"] > 0
         ).squeeze()
         # --
+        # Prune primitives where the mean absolute amplitude is negligible
+        amplitudes = self.get_amplitudes
+        mean_amp = torch.mean(torch.abs(amplitudes), dim=-1).squeeze()
+        amp_prune_mask = mean_amp < 1e-4
+        prune_mask = torch.logical_or(prune_mask, amp_prune_mask)
 
         if remove_outliers:
             outliers_mask = update_mask_based_on_outliers(to_numpy(self.get_xyz), prob=0.8, neighbors=512)
