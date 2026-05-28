@@ -15,12 +15,9 @@ import pymeshlab
 import random
 import math
 import torch.nn
-from diff_gaussian_rasterization import (
-    GaussianRasterizationSettings,
-    GaussianRasterizer,
-)
+from diff_gaussian_mlp_max_rasterization import Gaussian_MLP_RasterizationSettings, Gaussian_MLP_Rasterizer
 from src.utils.sh_utils import eval_sh
-from src.utils.transforms import project_points
+from src.utils.transforms import project_points, matrix_to_quaternion as matrix_to_quaternion_torch
 from src.utils.vis_util import get_colors_from_cmap
 from src.utils.extra import *
 import torch.distributions as D
@@ -263,6 +260,7 @@ def strip_symmetric(sym):
 
 def build_symmetric(L):
     cov = torch.zeros((L.shape[0], 3, 3), dtype=L.dtype, device=L.device)
+
     cov[:, 0, 0] = L[:, 0]
     cov[:, 0, 1] = L[:, 1]
     cov[:, 0, 2] = L[:, 2]
@@ -352,6 +350,12 @@ def render_gaussians(
     cano_means,
     cano_features,
     cano_opacity,
+    cano_scale,
+    cano_rotation,
+    cano_frequency,
+    cano_amplitude,
+    cano_phase,
+    cano_offset,
     camera,
     bg_color,
     colors_precomp=None,
@@ -375,7 +379,7 @@ def render_gaussians(
     tanfovx = math.tan(camera.fovx * 0.5)
     tanfovy = math.tan(camera.fovy * 0.5)
 
-    raster_settings = GaussianRasterizationSettings(
+    raster_settings = Gaussian_MLP_RasterizationSettings(
         image_height=int(camera.height),
         image_width=int(camera.width),
         tanfovx=tanfovx,
@@ -388,9 +392,10 @@ def render_gaussians(
         campos=camera.camera_center.to(device),
         prefiltered=False,
         debug=False,
+        antialiasing=False
     )
 
-    rasterizer = GaussianRasterizer(raster_settings=raster_settings)
+    rasterizer = Gaussian_MLP_Rasterizer(raster_settings=raster_settings)
 
     means2D = screenspace_points
     opacity = cano_opacity
@@ -403,16 +408,25 @@ def render_gaussians(
             posed_means, cano_features, cano_means, camera, sh_degree, tf
         )
 
-    # Rasterize visible Gaussians to image, obtain their radii (on screen).
-    rendered_image, radii = rasterizer(
+    frequencies_boosted = cano_frequency * 30
+    phases_boosted = cano_phase*30
+
+
+    # The CUDA MLP kernel still uses scales/rotations for auxiliary terms even
+    # when cov3D_precomp is provided, so they must always be passed.
+    rendered_image, radii, _ = rasterizer(
         means3D=posed_means,
         means2D=means2D,
         shs=None,
         colors_precomp=colors_precomp,
         opacities=opacity,
-        scales=None,
-        rotations=None,
-        cov3D_precomp=posed_cov,
+        scales=cano_scale,
+        rotations=cano_rotation,
+        weight1=frequencies_boosted,
+        bias1=phases_boosted,
+        weight2=cano_amplitude,
+        bias2=cano_offset,
+        cov3D_precomp=None,
     )
 
     rendered_image = torch.permute(rendered_image, (1, 2, 0))
@@ -425,6 +439,10 @@ def render_gaussians(
         "viewspace_points": screenspace_points,
         "visibility_filter": radii > 0,
         "radii": radii,
+        "frequencies": cano_frequency,
+        "phases": cano_phase,
+        "amplitudes": cano_amplitude,
+        "offsets": cano_offset,
     }
 
 
@@ -457,48 +475,55 @@ def density_update(model, pred, extent, global_step, bg_color, mask_to_prune=Non
             update_optimizer = True
 
             cprint(f"Removing pts : {mask_to_prune.sum()}", "green")
-        else:
-            viewspace_point_tensor = pred["viewspace_points"]
-            visibility_filter = pred["visibility_filter"]
-            radii = pred["radii"]
-            cameras_extent = extent
 
-            # Densification
-            if global_step < model.opts.densify_until_step:
-                # Keep track of max radii in image-space for pruning
-                model.max_radii2D[visibility_filter] = torch.max(
-                    model.max_radii2D[visibility_filter], radii[visibility_filter]
+            return update_optimizer
+    
+        viewspace_point_tensor = pred["viewspace_points"]
+        visibility_filter = pred["visibility_filter"]
+        radii = pred["radii"]
+        frequencies = pred["frequencies"]
+        phases = pred["phases"]
+        amplitudes = pred["amplitudes"]
+        offsets = pred["offsets"]
+        cameras_extent = extent
+
+        # Densification
+        if global_step < model.opts.densify_until_step:
+            # Keep track of max radii in image-space for pruning
+            model.max_radii2D[visibility_filter] = torch.max(
+                model.max_radii2D[visibility_filter], radii[visibility_filter]
+            )
+
+            model.add_densification_stats(viewspace_point_tensor, frequencies, phases, amplitudes, offsets, visibility_filter)
+            if (
+                global_step > model.opts.densify_from_step
+                and global_step % model.opts.densification_interval == 0
+            ):
+                size_threshold = (
+                    model.opts.size_threshold
+                    if global_step > model.opts.opacity_reset_interval
+                    else None
                 )
 
-                model.add_densification_stats(viewspace_point_tensor, visibility_filter)
-                if (
-                    global_step > model.opts.densify_from_step
-                    and global_step % model.opts.densification_interval == 0
-                ):
-                    size_threshold = (
-                        model.opts.size_threshold
-                        if global_step > model.opts.opacity_reset_interval
-                        else None
-                    )
+                clean_outliers = (global_step % model.opts.remove_outliers_step) == 0
+                model.densify_and_prune(
+                    model.opts.densify_split_grad_threshold,
+                    model.opts.densify_clone_grad_threshold,
+                    model.opts.min_grad_prune,
+                    cameras_extent,
+                    size_threshold,
+                    clean_outliers
+                )
+                print("gaussians changed to ", model.get_xyz.shape[0])
+                update_optimizer = True
 
-                    clean_outliers = global_step == model.opts.remove_outliers_step
-                    model.densify_and_prune(
-                        model.opts.densify_grad_threshold,
-                        model.opts.min_opacity_threshold,
-                        cameras_extent,
-                        size_threshold,
-                        clean_outliers,
-                    )
-                    print("gaussians changed to ", model.get_xyz.shape[0])
+            if global_step % model.opts.opacity_reset_interval == 0 or (
+                (bg_color == "white")
+                and global_step == model.opts.densify_from_step
+            ):
+                if global_step != 0:
+                    model.reset_opacity()
                     update_optimizer = True
-
-                if global_step % model.opts.opacity_reset_interval == 0 or (
-                    (bg_color == "white")
-                    and global_step == model.opts.densify_from_step
-                ):
-                    if global_step != 0:
-                        model.reset_opacity()
-                        update_optimizer = True
     return update_optimizer
 
 
@@ -575,3 +600,37 @@ def get_cmap(pt1, pt2, c_thresh=0.004, cmap_type="gray"):
     colors = get_colors_from_cmap(to_numpy(dist), cmap_name=cmap_type)[..., :3]
     colors = attach(to_tensor(colors), pt1.device)
     return dist, indices, colors
+
+def covariance_to_scale_rotation(covariance):
+    if covariance.dim() == 2 and covariance.shape[-1] == 6:
+        covariance = build_symmetric(covariance)
+    covariance = 0.5 * (covariance + covariance.transpose(1, 2))
+    eigenvalues, eigenvectors = torch.linalg.eigh(covariance)
+    order = torch.argsort(eigenvalues, dim=1, descending=True)
+    eigenvalues = torch.gather(eigenvalues, 1, order)
+    eigenvectors = torch.gather(
+        eigenvectors, 2, order.unsqueeze(1).expand(-1, 3, -1)
+    )
+
+    determinant = torch.linalg.det(eigenvectors)
+    flip_mask = determinant < 0
+    if torch.any(flip_mask):
+        eigenvectors = eigenvectors.clone()
+        eigenvectors[flip_mask, :, -1] *= -1
+
+    scales = torch.sqrt(torch.clamp(eigenvalues, min=1e-8))
+    rotations = matrix_to_quaternion_torch(eigenvectors)
+
+    # Keep decomposition numerically safe before values hit CUDA rasterization.
+    scales = torch.nan_to_num(scales, nan=1e-4, posinf=1.0, neginf=1e-4)
+    rotations = torch.nan_to_num(rotations, nan=0.0, posinf=0.0, neginf=0.0)
+    rotations = rotations / torch.clamp(rotations.norm(dim=-1, keepdim=True), min=1e-8)
+
+    invalid_rot = ~torch.isfinite(rotations).all(dim=1)
+    if torch.any(invalid_rot):
+        rotations = rotations.clone()
+        rotations[invalid_rot] = torch.tensor(
+            [1.0, 0.0, 0.0, 0.0], device=rotations.device, dtype=rotations.dtype
+        )
+
+    return scales, rotations

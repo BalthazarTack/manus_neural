@@ -15,9 +15,9 @@ from joblib import Parallel, delayed
 from tqdm import tqdm
 from glob import glob
 
-from src.utils.reader import Reader
-import src.utils.params as param_utils
-from src.utils.parser import add_common_args
+from preprocess.src.utils.reader import Reader
+import preprocess.src.utils.params as param_utils
+from preprocess.src.utils.parser import add_common_args
 
 sys.path.append("./AlphaPose_mp")
 from alphapose.models import builder
@@ -42,7 +42,7 @@ parser.add_argument("--checkpoint", default="AlphaPose_mp/pretrained_models/mult
                     help="checkpoint file name")
 
 add_common_args(parser)
-# parser.add_argument("--out_dir", required=True, type=str)
+parser.add_argument("--out_dir", required=True, type=str)
 parser.add_argument("--dump_image", action="store_true")
 args = parser.parse_args()
 

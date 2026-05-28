@@ -1,9 +1,9 @@
 import torch
-from src.models.gaussian import GaussianModel
+from src.models.gaussian import GaussianModelMLP_HB
 from src.utils.extra import *
 from src.utils.gaussian_utils import skinning_weights_from_voxel_grid
 
-class HandGaussianModel(GaussianModel):
+class HandGaussianModel(GaussianModelMLP_HB):
     """
     
     """

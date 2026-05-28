@@ -3,7 +3,7 @@ import lpips
 import hydra
 from src.modules.base import BaseTrainingModule
 from src.utils.gaussian_utils import (
-    render_gaussians,
+    render_gaussians,    
     strip_symmetric,
     update_learning_rate,
     get_points_outside_mask,
@@ -14,6 +14,7 @@ from src.utils.train_utils import (
 from src.utils.loss_utils import psnr
 from src.utils.transforms import project_points
 from src.utils.extra import *
+from src.utils.gaussian_utils import covariance_to_scale_rotation
 
 
 class TrainingModule(BaseTrainingModule):
@@ -71,7 +72,7 @@ class TrainingModule(BaseTrainingModule):
             _recursive_=False,
         )
 
-        self.model.training_setup() if self.mode != "test" else None
+        self.model.training_setup(self.opts.model.opts) if self.mode != "test" else None
 
     def configure_optimizers(self):
         return self.model.optimizer
@@ -82,6 +83,11 @@ class TrainingModule(BaseTrainingModule):
         offset_grid = self.model.offset_mlp(grid_points, pose_latent)
         offset_grid = offset_grid.reshape(self.model.grid_points.shape)
         return offset_grid
+
+    def _sync_pts_mask(self):
+        num_points = self.model.get_xyz.shape[0]
+        if not hasattr(self, "pts_mask") or self.pts_mask.shape[0] != num_points:
+            self.pts_mask = torch.zeros(num_points, dtype=torch.bool, device=self.device)
 
     def forward(self, batch):
         cano_xyz = self.model.get_xyz
@@ -124,13 +130,22 @@ class TrainingModule(BaseTrainingModule):
         cov = torch.einsum(
             "bij,bjk,bkl->bil", tf[..., :3, :3], cov, tf[..., :3, :3].transpose(1, 2)
         )
+        posed_scale, posed_rotation = covariance_to_scale_rotation(cov)
         cov = strip_symmetric(cov)
         pred = {
             "posed_xyz": posed_xyz,
             "posed_cov": cov,
+            "posed_scale": posed_scale,
+            "posed_rotation": posed_rotation,
             "cano_xyz": self.model.get_xyz,
             "cano_features": self.model.get_features,
             "cano_opacity": self.model.get_opacity,
+            "cano_rotation": self.model.get_rotation,
+            "cano_scale": self.model.get_scaling,
+            "cano_frequency": self.model.get_frequencies,
+            "cano_amplitude": self.model.get_amplitudes,
+            "cano_phase": self.model.get_phases,
+            "cano_offset": self.model.get_offsets,
             "tf": tf,
             "skin_wts": skin_wts,
         }
@@ -144,6 +159,12 @@ class TrainingModule(BaseTrainingModule):
             pred.cano_xyz,
             pred.cano_features,
             pred.cano_opacity,
+            pred.posed_scale,
+            pred.posed_rotation,
+            pred.cano_frequency,
+            pred.cano_amplitude,
+            pred.cano_phase,
+            pred.cano_offset,
             batch["camera"],
             batch["bg_color"],
             sh_degree=self.model.opts.sh_degree,
@@ -192,6 +213,7 @@ class TrainingModule(BaseTrainingModule):
 
     def on_after_backward(self):
         if self.do_density_update:
+            self._sync_pts_mask()
             if self.global_step < self.model.opts.remove_seg_end:
                 camera = self.rendered["camera"]
                 points = self.rendered["posed_xyz"].detach()
@@ -222,18 +244,15 @@ class TrainingModule(BaseTrainingModule):
                 self.rendered, self.trainer.optimizers[0], prune_mask
             )
             if res:
-                self.pts_mask = torch.zeros(
-                    self.model.get_xyz.shape[0], dtype=torch.bool, device=self.device
-                )
+                self._sync_pts_mask()
 
     def on_before_optimizer_step(self, opts):
         if len(opts.param_groups) > 1:
             opts = update_learning_rate(opts, self.model, self.global_step)
 
     def on_train_epoch_start(self):
-        self.pts_mask = torch.zeros(
-            self.model.get_xyz.shape[0], dtype=torch.bool, device=self.device
-        )
+        print("number of primitives:", self.model.get_xyz.shape[0])
+        self._sync_pts_mask()
 
     def training_step(self, batch, batch_idx):
         rendered = self.render(batch)
@@ -275,6 +294,12 @@ class TrainingModule(BaseTrainingModule):
                     opt.step()
             else:
                 opts.step()
+
+            removed = self.model.remove_nan_points()
+            if removed is None:
+                removed = 0
+            if removed > 0:
+                self._sync_pts_mask()
 
         self.log("loss", final_loss, sync_dist=True, batch_size=self.batch_size)
         psnr_val = psnr(rendered["render"], batch["rgb"][0])

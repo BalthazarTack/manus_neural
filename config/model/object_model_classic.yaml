@@ -1,0 +1,4 @@
+_target_: src.models.gaussian_classic.GaussianModel
+
+defaults:
+  - gaussian/gaussian@opts

@@ -1,8 +1,7 @@
 import torch
 from easydict import EasyDict as edict
-from scipy.spatial.transform import Rotation
 from src.modules.base import BaseTrainingModule
-from src.utils.gaussian_utils import render_gaussians, calculate_colors_from_sh, get_cmap, strip_symmetric, get_nocs_colors, get_nocs_grid
+from src.utils.gaussian_utils import render_gaussians, calculate_colors_from_sh, get_cmap, strip_symmetric, get_nocs_colors, get_nocs_grid, covariance_to_scale_rotation
 from src.utils.train_utils import load_models, load_modules, freeze_model
 from src.utils.loss_utils import psnr
 from src.utils.vis_util import get_colors_from_cmap
@@ -23,6 +22,9 @@ class TrainingModule(BaseTrainingModule):
 
         self.h_module = load_modules(self.opts.hand_module, self.opts, "test", self.opts.hand_model,
                                      checkpoint=hand_model_ckpt)
+
+        print("Object points:", self.o_module.model.get_xyz.shape[0])
+        print("Hand points:", self.h_module.model.get_xyz.shape[0])
 
         if self.opts.optimize_hand:
             self.h_module.model.training_setup()
@@ -55,6 +57,19 @@ class TrainingModule(BaseTrainingModule):
         cano_xyz = torch.concat([h_out.cano_xyz, o_out.cano_xyz], dim=0)
         cano_features = torch.concat([h_out.cano_features, o_out.cano_features], dim=0)
         cano_opacity = torch.concat([h_out.cano_opacity, o_out.cano_opacity], dim=0)
+        h_scale = getattr(h_out, "posed_scale", h_out.cano_scale)
+        h_rotation = getattr(h_out, "posed_rotation", h_out.cano_rotation)
+        o_scale = getattr(o_out, "posed_scale", o_out.cano_scale)
+        o_rotation = getattr(o_out, "posed_rotation", o_out.cano_rotation)
+        posed_scale = torch.concat([h_scale, o_scale], dim=0)
+        posed_rotation = torch.concat([h_rotation, o_rotation], dim=0)
+        cano_rotation = torch.concat([h_out.cano_rotation, o_out.cano_rotation], dim=0)
+        cano_scale = torch.concat([h_out.cano_scale, o_out.cano_scale], dim=0)
+        cano_frequency = torch.concat([h_out.cano_frequency, o_out.cano_frequency], dim=0)
+        cano_amplitude = torch.concat([h_out.cano_amplitude, o_out.cano_amplitude], dim=0)
+        cano_phase = torch.concat([h_out.cano_phase, o_out.cano_phase], dim=0)
+        cano_offset = torch.concat([h_out.cano_offset, o_out.cano_offset], dim=0)
+
         o_out_tf = attach(torch.eye(4)[None].repeat((o_out.cano_xyz.shape[0], 1, 1)), cov.device)
         tf = torch.concat([h_out.tf, o_out_tf], dim=0)
 
@@ -71,6 +86,14 @@ class TrainingModule(BaseTrainingModule):
             "cano_xyz": cano_xyz,
             "cano_features": cano_features,
             "cano_opacity": cano_opacity,
+            "cano_rotation": cano_rotation,
+            "cano_scale": cano_scale,
+            "posed_rotation": posed_rotation,
+            "posed_scale": posed_scale,
+            "cano_frequency": cano_frequency,
+            "cano_amplitude": cano_amplitude,
+            "cano_phase": cano_phase,
+            "cano_offset": cano_offset,
             "tf": tf,
             "h_out": h_out,
             "o_out": o_out
@@ -102,23 +125,55 @@ class TrainingModule(BaseTrainingModule):
             render = torch.cat([skin_wts, acc_h_cmap], dim=1)
 
         elif self.render_contact_type == 'results':
-            rendered = render_gaussians(pred.posed_xyz, pred.posed_cov, pred.cano_xyz,
-                                        pred.cano_features, pred.cano_opacity, batch['camera'],
-                                        batch['bg_color'], None, sh_degree=self.model.opts.sh_degree, tf=pred.tf)
+
+
+            rendered = render_gaussians( pred.posed_xyz,
+                                        pred.posed_cov,
+                                        pred.cano_xyz,
+                                        pred.cano_features,
+                                        pred.cano_opacity,
+                                        pred.posed_scale,
+                                        pred.posed_rotation,
+                                        pred.cano_frequency,
+                                        pred.cano_amplitude,
+                                        pred.cano_phase,
+                                        pred.cano_offset,
+                                        batch["camera"],
+                                        batch["bg_color"],
+                                        sh_degree=self.model.opts.sh_degree,
+                                        tf=pred.tf
+                                        )
 
             rgb_img = rendered['render']
+
+           
 
             _, o_cmap = self.render_contacts(pred, batch, batch['camera'], 'object_only')
             h_dist, h_cmap = self.render_contacts(pred, batch, batch['cano_camera'], 'hand_only')
             self.h_ac.append(h_dist)
             local_h_ac = torch.stack(self.h_ac).sum(axis=0)
             _, acc_h_cmap = self.render_contacts(pred, batch, batch['cano_camera'], 'accumulated', acc_dist=local_h_ac)
+
             render = torch.cat([rgb_img, h_cmap, o_cmap, acc_h_cmap], dim=1)
 
+
         elif self.render_contact_type == 'nocs':
-            rendered = render_gaussians(pred.posed_xyz, pred.posed_cov, pred.cano_xyz,
-                                        pred.cano_features, pred.cano_opacity, batch['camera'],
-                                        batch['bg_color'], None, sh_degree=self.model.opts.sh_degree, tf=pred.tf)
+            rendered = render_gaussians( pred.posed_xyz,
+                                        pred.posed_cov,
+                                        pred.cano_xyz,
+                                        pred.cano_features,
+                                        pred.cano_opacity,
+                                        pred.posed_scale,
+                                        pred.posed_rotation,
+                                        pred.cano_frequency,
+                                        pred.cano_amplitude,
+                                        pred.cano_phase,
+                                        pred.cano_offset,
+                                        batch["camera"],
+                                        batch["bg_color"],
+                                        sh_degree=self.model.opts.sh_degree,
+                                        tf=pred.tf
+                                        )
 
             rgb_img = rendered['render']
             _, o_cmap = self.render_contacts(pred, batch, batch['camera'], 'nocs_object_only')
@@ -144,10 +199,12 @@ class TrainingModule(BaseTrainingModule):
         bg_color = batch['bg_color']
         pt1 = pred.o_out
         pt2 = pred.h_out
+        source = pred
         posed_cov = None
         posed_xyz = None
 
         if render_type == 'object_only':
+            source = pt1
             dist, indices, cmap = get_cmap(pt1.posed_xyz, pt2.posed_xyz, cmap_type=cmap_type)
             posed_xyz = pt1.posed_xyz
             posed_cov = self.o_module.model.get_covariance()
@@ -155,6 +212,7 @@ class TrainingModule(BaseTrainingModule):
             colors_precomp = rgb_colors * alpha + (1 - alpha) * cmap
 
         elif render_type == 'hand_only':
+            source = pt2
             dist, indices, cmap = get_cmap(pt2.posed_xyz, pt1.posed_xyz, cmap_type=cmap_type)
             posed_xyz = pt2.cano_xyz
             posed_cov = self.h_module.model.get_covariance()
@@ -162,6 +220,7 @@ class TrainingModule(BaseTrainingModule):
             colors_precomp = rgb_colors * alpha + (1 - alpha) * cmap
 
         elif render_type == 'nocs_hand_only':
+            source = pt2
             dist, indices, cmap = get_cmap(pt2.posed_xyz, pt1.posed_xyz, cmap_type=cmap_type)
             posed_xyz = pt2.cano_xyz
             posed_cov = self.h_module.model.get_covariance()
@@ -172,9 +231,11 @@ class TrainingModule(BaseTrainingModule):
             colors_precomp =cmap
 
         elif render_type == 'nocs_object_only':
+            source = pt1
             dist, indices, cmap = get_cmap(pt1.posed_xyz, pt2.posed_xyz, cmap_type=cmap_type)
             posed_xyz = pt1.posed_xyz
             posed_cov = self.o_module.model.get_covariance()
+
             mask = dist > 0
             indices = indices.int()
             rgb_colors = self.nocs_grid[indices]
@@ -183,6 +244,7 @@ class TrainingModule(BaseTrainingModule):
             colors_precomp =cmap
 
         elif render_type == 'accumulated':
+            source = pt2
             dist = acc_dist
             cmap = get_colors_from_cmap(to_numpy(acc_dist), cmap_name=cmap_type)[..., :3]
             cmap = attach(to_tensor(cmap), pt2.posed_xyz.device)
@@ -192,6 +254,7 @@ class TrainingModule(BaseTrainingModule):
             colors_precomp = rgb_colors * alpha + (1 - alpha) * cmap
 
         elif render_type == 'acc_gt_eval':
+            source = pt2
             dist = acc_dist
             cmap = get_colors_from_cmap(to_numpy(acc_dist), cmap_name=cmap_type)[..., :3]
             cmap = attach(to_tensor(cmap), pt2.posed_xyz.device)
@@ -200,17 +263,21 @@ class TrainingModule(BaseTrainingModule):
             colors_precomp = cmap
 
         elif render_type == 'skin_wts':
+            source = pt2
             dist = None
             posed_xyz = pt2.posed_xyz
             posed_cov = pt2.posed_cov
             colors_precomp = self.skin_colors.to(posed_xyz.device)
 
+        scale,rotation=covariance_to_scale_rotation(posed_cov)
+
         posed_xyz = pred.posed_xyz if posed_xyz is None else posed_xyz
         posed_cov = pred.posed_cov if posed_cov is None else posed_cov
 
-        rendered = render_gaussians(posed_xyz, posed_cov, pred.cano_xyz,
-                                    pred.cano_features, pred.cano_opacity, camera,
-                                    bg_color, colors_precomp, sh_degree=3, tf=pred.tf)['render']
+        rendered = render_gaussians(posed_xyz, posed_cov, source.cano_xyz,
+                        source.cano_features, source.cano_opacity, scale, rotation,
+                        source.cano_frequency, source.cano_amplitude, source.cano_phase, source.cano_offset,
+                                    camera, bg_color, colors_precomp, sh_degree=3, tf=source.tf)['render']
         return dist, rendered
 
     def on_test_epoch_start(self):

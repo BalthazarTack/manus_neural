@@ -3,7 +3,7 @@
 SUBJECT=$1
 EXP_NAME=$2
 
-DATA_DIR="MANUS_data"
+DATA_DIR="dataset"
 EXP_DIR="outputs/hand/${SUBJECT}/${EXP_NAME}"
 ROOT_DIR="${DATA_DIR}/${SUBJECT}/actions_hdf5"
 
@@ -19,7 +19,7 @@ python main.py --config-name HAND_GAUSSIAN \
     trainer.gpus=[0] \
     trainer.num_workers=4 \
     trainer.accum_iter=1 \
-    trainer.pl_vars.max_steps=15000 \
+    trainer.pl_vars.max_steps=50000 \
     +trainer.pl_vars.check_val_every_n_epoch=1 \
     train_dataset.opts.num_time_steps=1 \
     train_dataset.opts.subject=$SUBJECT \
@@ -40,7 +40,9 @@ python main.py --config-name HAND_GAUSSIAN \
     model.opts.start_lpips_iter=1000 \
     model.opts.grid_size='[1.0, 0.9, 0.6]' \
     model.opts.grid_offset='[0.01, 0.0, -0.008]' \
-    model.opts.grid_res=128 
+    model.opts.remove_outliers_step=10000000 \
+    model.opts.grid_res=128 \
+    model.opts.densify_until_step=47000
 
-#bash scripts/train/inference_hand.sh $SUBJECT $EXP_NAME
+bash scripts/train/inference_hand.sh $SUBJECT $EXP_NAME
 

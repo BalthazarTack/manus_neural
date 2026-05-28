@@ -20,6 +20,11 @@ class BaseTrainingModule(LightningModule):
         self.num_workers = opts.trainer.num_workers
         self.opts = opts
 
+        try:
+            self.dump_image_every_n_epochs = int(self.opts.trainer.dump_image_every_n_epochs)
+        except Exception:
+            self.dump_image_every_n_epochs = 1
+
         self.test_on_train_dataset = self.opts.test_dataset.opts.test_on_train_dataset
         self.worst_cases = self.opts.test_dataset.opts.worst_cases
 
@@ -270,6 +275,8 @@ class BaseTrainingModule(LightningModule):
 
     def dump_gaussians(self, pred, batch_idx, results_dir=None, colors=None):
         if self.mode == "train":
+            if self.current_epoch % self.dump_image_every_n_epochs != 0:
+                return
             if results_dir is None:
                 results_dir = self.val_results_dir
             else:

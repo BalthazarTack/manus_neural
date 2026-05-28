@@ -2,13 +2,13 @@
 
 SUBJECT=$1
 
-DATA_DIR="/users/cpokhari/work/manus/MANUS_data"
+DATA_DIR="/media/rana/Balthazar/3Dreconstruction/manus/dataset"
 EXP_DIR="outputs/object"
 ROOT_DIR="${DATA_DIR}/${SUBJECT}"
 CALIB_DIR="${ROOT_DIR}/calib.object"
 
 ## For all the objects we want to train
-OBJS=("books1")
+OBJS=("bags2")
 for OBJ_NAME in "${OBJS[@]}"
 do
   echo "Training $OBJ_NAME"
@@ -25,7 +25,7 @@ do
       trainer.num_workers=4 \
       train_dataset.opts.split_ratio=0.98 \
       trainer.pl_vars.accumulate_grad_batches=1 \
-      trainer.pl_vars.max_steps=10000 \
+      trainer.pl_vars.max_steps=25000 \
       train_dataset.opts.subject=$SUBJECT \
       train_dataset.opts.root_dir=$OBJ_DIR \
       train_dataset.opts.params_dir=$CALIB_DIR \
@@ -33,9 +33,10 @@ do
       model.opts.densification_interval=100 \
       model.opts.percent_dense=0.00001 \
       model.opts.densify_grad_threshold=0.00003 \
-      model.opts.remove_outliers_step=150000 \
+      model.opts.remove_outliers_step=100000000 \
       model.opts.isotropic_scaling=false \
-      model.opts.sample_size=300000
+      model.opts.sample_size=30000 \
+      model.opts.densify_until_step=24000
 
 ## Inference on novel views requires downloading the Blender
 ## Set the BLENDER_PATH in the inference-object.sh

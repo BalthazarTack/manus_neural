@@ -10,7 +10,7 @@ from glob import glob
 import trimesh
 
 # sys.path.append("./pose-estimation")
-import src.utils.params as param_utils
+import preprocess.src.utils.params as param_utils
 
 sys.path.append("./EasyMocap")
 from myeasymocap.operations.triangulate import SimpleTriangulate
@@ -86,7 +86,14 @@ for i in range(len(params)):
     intr, dist = param_utils.get_intr(params[i])
     projs.append(intr @ extr)
 projs = np.asarray(projs)
-cameras['P'] = projs[use_idx]
+
+cameras = {
+    'P': projs[use_idx],
+    'R': np.asarray(rot)[use_idx],
+    'T': np.asarray(trans)[use_idx],
+    'K': np.asarray(intrs)[use_idx],
+    'dist': np.asarray(dists)[use_idx],
+}
 
 frames = os.listdir(os.path.join(keypoints2d_dir, os.listdir(keypoints2d_dir)[0]))
 
@@ -127,7 +134,7 @@ for frame in tqdm(frames):
     
     ## Easy Mocap for 3D keypoints
     triangulation = SimpleTriangulate("iterative")
-    keypoints3d = triangulation(keypoints2d, cameras, undistort = False)['keypoints3d']
+    keypoints3d = triangulation(keypoints2d, cameras)['keypoints3d']
     conf = keypoints3d[..., -1]
     valid = (conf > args.conf_thresh).astype(np.uint8)
     

@@ -5,12 +5,12 @@ HAND_EXP_NAME=$2
 MODE=$3 ##results/eval
 
 EXP_DIR="outputs"
-DATA_DIR="MANUS_data"
+DATA_DIR="dataset"
 ROOT_DIR="${DATA_DIR}/${SUBJECT}"
 
 ## Define the objects for which we want to do grasp capture. 
 ## Note that if you are using "eval" mode, then objs should be `green colored evaluation objects`
-OBJS=("books1")
+OBJS=("bags2_2")
 
 for OBJ_NAME in "${OBJS[@]}"
 do
@@ -21,10 +21,10 @@ do
   HAND_EXP_DIR="${EXP_DIR}/hand/${SUBJECT_NAME}/${HAND_EXP_NAME}"
 
   ## Note that here 'grasp1' can be 'grasp2' and so on.. if dataset contains it. 
-  GRASP_PATH="${DATA_DIR}/${SUBJECT_NAME}/grasps/${OBJECT_EXP_NAME}_grasp1/meta_data.pkl"
+  GRASP_PATH="/media/rana/Balthazar/3Dreconstruction/manus/preprocess/pose_outputs/grasps/bags2_grasp1/meta_data_20.pkl"
 
   EXP_NAME=$OBJECT_EXP_NAME"--"$HAND_EXP_NAME
-  EXP_DIR="${EXP_DIR}/composite/${SUBJECT_NAME}/${EXP_NAME}/"
+  EXP_DIR="${EXP_DIR}/composite_densification_stop/${SUBJECT_NAME}/${EXP_NAME}/"
 
   if [ ! -d "$EXP_DIR" ]; then
       mkdir -p "${EXP_DIR}/results"

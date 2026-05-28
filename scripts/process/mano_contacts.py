@@ -8,7 +8,7 @@ from tqdm import tqdm
 from natsort import natsorted
 
 sys.path.append(os.getcwd())
-from src.utils.gaussian_utils import get_cmap
+from manus.src.utils.gaussian_utils import get_cmap
 from src.utils.vis_util import get_colors_from_cmap
 from src.utils.extra import *
 from src.utils.train_utils import *

@@ -10,6 +10,7 @@ log_losses: true
 loggers: [csv] #wandb
 torch_compile_mode:
 accum_iter: 1
+dump_image_every_n_epochs: 5
 ##default, reduce-overhead, and max-autotune
 
 pl_vars:

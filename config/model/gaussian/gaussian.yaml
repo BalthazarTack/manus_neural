@@ -14,10 +14,13 @@ percent_dense : 0.000001
 lambda_dssim : 0.2
 densification_interval : 100
 opacity_reset_interval : 3000
-densify: true
+densify: True
 densify_from_step : 100
 densify_until_step : 50000
 densify_grad_threshold : 0.0002
+min_grad_prune: 1e-6
+densify_clone_grad_threshold: 0.00001
+densify_split_grad_threshold: 0.0001
 start_lpips_iter : 1000
 min_opacity_threshold : 0.005
 size_threshold: 20
@@ -26,3 +29,10 @@ isotropic_scaling: false
 remove_seg_start: 0
 remove_seg_end: 1000
 condition_number: 0.4
+
+frequencies_mlp_lr: 0.001
+phases_mlp_lr: 0.001
+amplitudes_mlp_lr: 0.001
+omega: 30
+n_neurons: 8
+opacity_volr_lr: 0.05

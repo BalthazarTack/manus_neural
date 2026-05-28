@@ -284,6 +284,7 @@ def dump_video(frames, out_path):
     out = cv2.VideoWriter(out_path, fourcc, 30.0, frame_size)
 
     for image in frames:
+        
         out.write(image[..., ::-1].astype(np.uint8))
     out.release()
     print("video is saved " + out_path)

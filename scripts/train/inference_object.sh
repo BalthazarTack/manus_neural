@@ -4,7 +4,7 @@ SUBJECT_NAME=$1
 EXP_NAME=$2
 EXP_DIR=$3
 
-BLENDER_PATH=~/data/users/cpokhari/blender-3.3/blender
+BLENDER_PATH=/opt/blender-4.1/blender
 
 ## Get novel cam path in the Blender
 PC_PLY_PATH="${EXP_DIR}/init_gaussians.ply"

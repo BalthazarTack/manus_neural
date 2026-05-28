@@ -10,7 +10,6 @@ EXP_DIR=$7
 CONTACT_RENDER_TYPE=$8
 DATA_DIR=$9
 
-
 if [[ $CONTACT_RENDER_TYPE == "acc_gt_eval" ]]; then
   GRASP_PATH="${DATA_DIR}/${SUBJECT_NAME}/evals/${OBJECT_EXP_NAME}_action/meta_data.pkl"
 #  CAM_PATH="/users/cpokhari/data/users/cpokhari/grasp_data/${SUBJECT_NAME}/calib.evals/optim_params.txt"
@@ -22,7 +21,7 @@ else
   CAM_PATH="${EXP_DIR}/results/novel_cam.pkl"
   BKGD_COLOR="white"
 
-  ~/data/users/cpokhari/blender-3.3/blender \
+  /opt/blender-4.1/blender \
       ./data/blend_files/static.blend \
       -P scripts/process/bl_render.py -b -- $PC_PLY_PATH $CAM_PATH 1.0 0.004 -1.578 0 0
 

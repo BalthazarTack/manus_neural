@@ -38,27 +38,27 @@ def visualize_ik(raw_dir, output_dir, raw_action, rest_poses_path, params_path, 
 
 def export_poses(output_dir, which, action, rest_poses_path): 
     rest_blend_path = rest_poses_path.replace('json', 'blend')
-    cmd = f'../blender/blender -b {rest_blend_path} -P scripts/export_poses.py -- -r {output_dir} -s {which}/{action} -f 20 --one_euro'
+    cmd = f'/opt/blender-4.1/blender -b {rest_blend_path} -P scripts/export_poses.py -- -r {output_dir} -s {which}/{action} -f 20 --one_euro'
     os.system(cmd)
 
 
 def main(): 
-    root_dir = "/users/cpokhari/data/datasets/BRICS/BRICS-DATA-02/neural-hands/subject0/"
-    params_path = "/users/cpokhari/data/datasets/MANUS_data/subject0/calib.object/optim_params.txt"
+    root_dir = "/media/rana/Balthazar/3Dreconstruction/manus/dataset/subject0"
+    params_path = "/media/rana/Balthazar/3Dreconstruction/manus/dataset/subject0/calib.object/optim_params.txt"
     output_dir = "./pose_outputs/"
-    raw_action = "2023-10-26_session_bag1_grasp1"
+    raw_action = "2023-10-26_session_bags2_grasp1"
     which = "grasps"
 
-    get_2d_keypoints(root_dir, raw_action, params_path, output_dir, which)
+    # get_2d_keypoints(root_dir, raw_action, params_path, output_dir, which)
 
     action = raw_action.split('_session_')[-1]
-    get_3d_keypoints(action, output_dir, params_path, which)
+    # get_3d_keypoints(action, output_dir, params_path, which)
 
     rest_poses_path=os.path.join(os.getcwd(), "rest_poses/subject0.json")
-    get_bone_length(output_dir, rest_poses_path, which)
-    get_poses(output_dir, action, rest_poses_path, which)
-    one_euro(output_dir, action, rest_poses_path, which)
-    visualize_ik(root_dir, output_dir, raw_action, rest_poses_path, params_path, which)
+    # get_bone_length(output_dir, rest_poses_path, which)
+    # get_poses(output_dir, action, rest_poses_path, which)
+    # one_euro(output_dir, action, rest_poses_path, which)
+    # visualize_ik(root_dir, output_dir, raw_action, rest_poses_path, params_path, which)
     export_poses(output_dir, which, action, rest_poses_path)
 
 

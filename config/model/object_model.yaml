@@ -1,4 +1,4 @@
-_target_: src.models.gaussian.GaussianModel
+_target_: src.models.gaussian.GaussianModelMLP_HB
 
 defaults:
   - gaussian/gaussian@opts
