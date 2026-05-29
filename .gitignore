@@ -9,8 +9,13 @@ __pycache__/
 .history/*
 .vscode/*
 
+# Agents
+AGENTS.md
+DATASET.md
+AGENTS.md
+
 # Distribution / packaging
-submodules/*
+submodules/diff-gaussian-mlp-max-rasterization/third_party*
 grasp_data/*
 MANUS_data/*
 mano_vis/*

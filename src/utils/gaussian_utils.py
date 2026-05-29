@@ -427,6 +427,7 @@ def render_gaussians(
         weight2=cano_amplitude,
         bias2=cano_offset,
         cov3D_precomp=None,
+        cano_means3D=cano_means,
     )
 
     rendered_image = torch.permute(rendered_image, (1, 2, 0))
