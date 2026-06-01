@@ -38,7 +38,24 @@ def rasterize_gaussians_mlp(
         cov3Ds_precomp,
         raster_settings,
         cano_means3D,
+    ):
+    return _RasterizeGaussians_MLP.apply(
+        means3D,
+        means2D,
+        sh,
+        colors_precomp,
+        opacities,
+        scales,
+        rotations,
+        weight1,
+        bias1,
+        weight2,
+        bias2,
+        cov3Ds_precomp,
+        raster_settings,
+        cano_means3D
     )
+
 
 
 class _RasterizeGaussians_MLP(torch.autograd.Function):

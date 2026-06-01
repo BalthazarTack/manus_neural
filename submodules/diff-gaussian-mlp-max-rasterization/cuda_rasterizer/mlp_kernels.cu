@@ -44,6 +44,7 @@ __host__ __device__ inline bool forward_mlp_siren(const float3 &g_xyz_vs,
     float length_d = sqrtf(dot(d_tilde, d_tilde));
     float8 w1_tilde = g_weight1 * d_tilde;
     float8 b1_tilde = g_weight1 * o_tilde + g_bias1;
+    float8 w2 = g_weight2;
 
     float raw_integral = g_bias2 * (t1 - t0);
 
