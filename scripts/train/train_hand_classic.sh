@@ -3,16 +3,14 @@
 SUBJECT=$1
 EXP_NAME=$2
 
-DATA_DIR="InterHand2.6M"
-# EXP_DIR="outputs/hand/${SUBJECT}/${EXP_NAME}"
+DATA_DIR="dataset"
+EXP_DIR="outputs_classic/hand/${SUBJECT}/${EXP_NAME}"
+ROOT_DIR="${DATA_DIR}/${SUBJECT}/actions_hdf5"
 
-EXP_DIR="outputs/hand/Interhand/"
-ROOT_DIR="${DATA_DIR}/hdf5"
+WIDTH=1280
+HEIGHT=720
 
-WIDTH=501
-HEIGHT=768
-
-python main.py --config-name HAND_GAUSSIAN \
+python main_classic.py --config-name HAND_GAUSSIAN_classic \
     output_dir=$EXP_DIR \
     trainer.loggers='[csv]' \
     trainer.mode='train' \
@@ -21,7 +19,7 @@ python main.py --config-name HAND_GAUSSIAN \
     trainer.gpus=[0] \
     trainer.num_workers=4 \
     trainer.accum_iter=1 \
-    trainer.pl_vars.max_steps=25000 \
+    trainer.pl_vars.max_steps=15000 \
     +trainer.pl_vars.check_val_every_n_epoch=1 \
     train_dataset.opts.num_time_steps=1 \
     train_dataset.opts.subject=$SUBJECT \
@@ -42,9 +40,6 @@ python main.py --config-name HAND_GAUSSIAN \
     model.opts.start_lpips_iter=1000 \
     model.opts.grid_size='[1.0, 0.9, 0.6]' \
     model.opts.grid_offset='[0.01, 0.0, -0.008]' \
-    model.opts.remove_outliers_step=10000000 \
-    model.opts.grid_res=128 \
-    model.opts.densify_until_step=20000
+    model.opts.grid_res=128 
 
 bash scripts/train/inference_hand.sh $SUBJECT $EXP_NAME
-

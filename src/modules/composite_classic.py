@@ -1,7 +1,7 @@
 import torch
 from easydict import EasyDict as edict
 from scipy.spatial.transform import Rotation
-from src.modules.base import BaseTrainingModule
+from src.modules.base_classic import BaseTrainingModule
 from src.utils.gaussian_utils_classic import render_gaussians, calculate_colors_from_sh, get_cmap, strip_symmetric, get_nocs_colors, get_nocs_grid
 from src.utils.train_utils import load_models, load_modules, freeze_model
 from src.utils.loss_utils import psnr

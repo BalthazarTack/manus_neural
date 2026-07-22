@@ -1,7 +1,7 @@
 from easydict import EasyDict as edict
 import lpips
 import hydra
-from src.modules.base import BaseTrainingModule
+from src.modules.base_classic import BaseTrainingModule
 from src.utils.gaussian_utils_classic import (
     render_gaussians,
     strip_symmetric,
@@ -293,6 +293,7 @@ class TrainingModule(BaseTrainingModule):
         checkpoint = remove_nans_from_checkpoint(checkpoint)
 
     def on_save_checkpoint(self, checkpoint):
+        print("saving chkpt!!!!")
         if "extra_params" not in checkpoint:
             checkpoint["extra_params"] = {}
 

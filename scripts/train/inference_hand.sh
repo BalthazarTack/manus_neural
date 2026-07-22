@@ -30,5 +30,6 @@ python main.py --config-name config.yaml \
     test_dataset.opts.frame_sample_rate=1 \
     test_dataset.opts.cam_path=$OUT_PATH \
     test_dataset.opts.color_bkgd_aug="white" \
-    test_dataset.opts.test_on_canonical_pose=false \
-    test_dataset.opts.worst_cases=false
+    test_dataset.opts.test_on_canonical_pose=true \
+    test_dataset.opts.worst_cases=false \
+    test_dataset.opts.metadata_path="/media/rana/Balthazar/3Dreconstruction/manus/preprocess/pose_outputs/subject1/grasps/color1_grasp1/meta_data.pkl" \

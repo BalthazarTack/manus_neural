@@ -130,6 +130,7 @@ def write_csv(csv_path, row, include_header=False):
                     "ssim",
                     "lpips",
                     "rendering_time",
+                    "num_primitives"
                 ]
             )
         writer.writerow(row)

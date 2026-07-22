@@ -39,7 +39,9 @@ def main(config):
         OmegaConf.save(config, save_path)
 
     ckpt_dir = os.path.join(cur_path, "checkpoints/")
+
     if config.checkpoint:
+        
         if config.checkpoint == "best":
             config.checkpoint = find_best_checkpoint(ckpt_dir)
         else:
@@ -64,7 +66,8 @@ def train(config, mode, ckpt_dir):
                 filename="{epoch:03d}-{step}-{loss:.6f}",
                 save_top_k=-1,
                 mode="min",
-                every_n_epochs=1,
+                every_n_epochs=100,
+                save_last=True,
                 verbose=True
             ),
             LearningRateMonitor(logging_interval='step'),
@@ -85,6 +88,7 @@ def train(config, mode, ckpt_dir):
         # strategy = 'ddp'
         ## DDP_parameter_false works for multiple models and optimizers but slow
         # strategy = 'ddp_find_unused_parameters_false'
+        
         trainer = pl.Trainer(
             devices=config.trainer.gpus,
             accelerator='gpu',
@@ -108,7 +112,10 @@ def train(config, mode, ckpt_dir):
     if mode == 'test':
         trainer.test(module)
     else:
+        start_train_time = time.time()
         trainer.fit(module)
+        train_time =  time.time() - start_train_time
+        print("training time: ", train_time)
 
 
 if __name__ == "__main__":

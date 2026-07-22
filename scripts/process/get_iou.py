@@ -8,6 +8,7 @@ import scipy
 import cv2
 import numpy as np
 from sklearn.metrics import jaccard_score
+import matplotlib.pyplot as plt
 
 import csv
 
@@ -154,8 +155,10 @@ def get_skin_mask(img, gt_mask):
 def get_parser():
     parser = argparse.ArgumentParser()
     parser.add_argument('--exp_dir', type=str, required=True)
+    parser.add_argument('--exp_dir_classic', type=str, required=True)
     parser.add_argument('--object_exp_name', type=str, required=True)
     parser.add_argument('--grasp_path', type=str, required=True)
+    parser.add_argument('--subj_name', type=str, required=True)
     return parser
 
 
@@ -274,33 +277,37 @@ def blend_masks(rgb, alpha, mask, weight=0.5):
     return final
 
 
-def combine_images(rgb, gt_mask, our_mask, mano_mask, harp_mask):
+def combine_images(rgb, gt_mask, our_mask, mano_mask, harp_mask, classic_mask):
     alpha = rgb[..., -1:] > 128
     rgb = rgb[..., :3] / 255
     our_mask = our_mask / 255
     mano_mask = mano_mask / 255
     harp_mask = harp_mask / 255
+    classic_mask = classic_mask / 255
     gt_mask = gt_mask / 255
 
     final_o = blend_masks(rgb, alpha, our_mask)
     final_m = blend_masks(rgb, alpha, mano_mask)
     final_h = blend_masks(rgb, alpha, harp_mask)
     final_gt = blend_masks(rgb, alpha, gt_mask)
+    final_c = blend_masks(rgb, alpha, classic_mask)
     rgb = rgb * alpha + (1 - alpha) * np.array([1, 1, 1])
 
-    row = np.concatenate([rgb, final_gt, final_m, final_h, final_o], axis=1)
+    row = np.concatenate([rgb, final_gt, final_m, final_h, final_o, final_c], axis=1)
     row = row * 255
     return row
 
 
 def main():
     args = get_parser().parse_args()
-    root_dir = '/'.join(args.grasp_path.split('/')[:-3])
-    gt_contact_dir = os.path.join(root_dir, "evals", f'{args.object_exp_name}_action', "gt_contacts_seg")
+    root_dir = '/'.join(args.grasp_path.split('/')[:-4])
+    gt_contact_dir = os.path.join(root_dir, args.subj_name, "evals", f'{args.object_exp_name}_action', "gt_contacts_seg")
 
     gt_mask_path = natsorted(glob.glob(os.path.join(gt_contact_dir, '*.png')))
     gt_img_path = natsorted(glob.glob(os.path.join(gt_contact_dir.replace("gt_contacts_seg", "gt_contacts"), '*.png')))
     our_mask_path = natsorted(glob.glob(os.path.join(args.exp_dir, 'results/eval_results/ours/acc_gt_eval/', '*.png')))
+    classic_mask_path = natsorted(glob.glob(os.path.join(args.exp_dir_classic, 'results/eval_results/ours/acc_gt_eval/', '*.png')))
+    print("classic_path: ", os.path.join(args.exp_dir_classic, 'results/eval_results/ours/acc_gt_eval/', '*.png'))
     mano_mask_path = natsorted(
         glob.glob(os.path.join(args.exp_dir, 'results/eval_results/mano/acc_eval_rendered/', '*.png')))
 
@@ -314,11 +321,15 @@ def main():
     row_of = []
     row_mf = []
     row_hf = []
+    row_c = []
+    row_cf = []
 
+    print(gt_mask_path)
     for i in range(len(gt_mask_path)):
         print("-----------------------------")
         print("gt_mask_path: ", gt_mask_path[i])
         print("our_mask_path: ", our_mask_path[i])
+        print("classic_mask_path: ", classic_mask_path[i])
         print("mano_mask_path: ", mano_mask_path[i])
         print("harp_mask_path: ", harp_mask_path[i])
         print("-----------------------------")
@@ -332,6 +343,10 @@ def main():
         our_mask = our_mask[:, 1080:, :]
         our_mask = cv2.inRange(our_mask, (128, 128, 128), (255, 255, 255))
 
+        classic_mask = cv2.imread(classic_mask_path[i])
+        classic_mask = classic_mask[:, 1080:, :]
+        classic_mask = cv2.inRange(classic_mask, (128, 128, 128), (255, 255, 255))
+
         mano_mask = cv2.imread(mano_mask_path[i])
         mano_mask = cv2.inRange(mano_mask, (128, 128, 128), (255, 255, 255))
 
@@ -343,23 +358,27 @@ def main():
         iou_o, f1_o, iou_acc_o, f1_acc_o = evaluate_metric(skin_mask, gt_mask, our_mask)
         iou_m, f1_m, iou_acc_m, f1_acc_m = evaluate_metric(skin_mask, gt_mask, mano_mask)
         iou_h, f1_h, iou_acc_h, f1_acc_h = evaluate_metric(skin_mask, gt_mask, harp_mask)
-        img_row = combine_images(gt_rgb, gt_mask, our_mask, mano_mask, harp_mask)
+        iou_c, f1_c, iou_acc_c, f1_acc_c = evaluate_metric(skin_mask, gt_mask, classic_mask)
+        img_row = combine_images(gt_rgb, gt_mask, our_mask, mano_mask, harp_mask, classic_mask)
         collage.append(img_row)
         row_m.append([*iou_m, iou_acc_m])
         row_o.append([*iou_o, iou_acc_o])
         row_h.append([*iou_h, iou_acc_h])
+        row_c.append([*iou_c, iou_acc_c])
         row_mf.append([*f1_m, f1_acc_m])
         row_of.append([*f1_o, f1_acc_o])
         row_hf.append([*f1_h, f1_acc_h])
-
+        row_cf.append([*f1_c, f1_acc_c])
     collages = np.vstack(collage).astype(np.uint8)
     out_path = os.path.join(args.exp_dir, 'results/eval_results/eval_collage.png')
     cv2.imwrite(out_path, collages)
 
     row_o = np.around(np.vstack(row_o).mean(axis=0), decimals=3)
+    row_c = np.around(np.vstack(row_c).mean(axis=0), decimals=3)
     row_m = np.around(np.vstack(row_m).mean(axis=0), decimals=3)
     row_h = np.around(np.vstack(row_h).mean(axis=0), decimals=3)
     row_of = np.around(np.vstack(row_of).mean(axis=0), decimals=3)
+    row_cf = np.around(np.vstack(row_cf).mean(axis=0), decimals=3)
     row_mf = np.around(np.vstack(row_mf).mean(axis=0), decimals=3)
     row_hf = np.around(np.vstack(row_hf).mean(axis=0), decimals=3)
 
@@ -370,9 +389,11 @@ def main():
              "bone12", "bone13", "bone14", "bone15", "bone16", "combined"])
 
         writer.writerow(["ours"] + row_o.tolist())
+        writer.writerow(["classic"] + row_c.tolist())
         writer.writerow(["mano"] + row_m.tolist())
         writer.writerow(["harp"] + row_h.tolist())
         writer.writerow(["ours_f1"] + row_of.tolist())
+        writer.writerow(["classic_f1"] + row_cf.tolist())
         writer.writerow(["mano_f1"] + row_mf.tolist())
         writer.writerow(["harp_f1"] + row_hf.tolist())
 

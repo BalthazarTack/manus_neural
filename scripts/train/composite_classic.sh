@@ -10,7 +10,7 @@ ROOT_DIR="${DATA_DIR}/${SUBJECT}"
 
 ## Define the objects for which we want to do grasp capture. 
 ## Note that if you are using "eval" mode, then objs should be `green colored evaluation objects`
-OBJS=("bags2")
+OBJS=("color1")
 
 for OBJ_NAME in "${OBJS[@]}"
 do
@@ -21,7 +21,7 @@ do
   HAND_EXP_DIR="${EXP_DIR}/hand/${SUBJECT_NAME}/${HAND_EXP_NAME}"
 
   ## Note that here 'grasp1' can be 'grasp2' and so on.. if dataset contains it. 
-  GRASP_PATH="/media/rana/Balthazar/3Dreconstruction/manus/preprocess/pose_outputs/grasps/bags2_grasp1/meta_data_20.pkl"
+  GRASP_PATH="/media/rana/Balthazar/3Dreconstruction/manus/preprocess/pose_outputs/${SUBJECT_NAME}/grasps/${OBJ_NAME}_grasp1/meta_data.pkl"
 
   EXP_NAME=$OBJECT_EXP_NAME"--"$HAND_EXP_NAME
   EXP_DIR="${EXP_DIR}/composite/${SUBJECT_NAME}/${EXP_NAME}/"
@@ -32,7 +32,7 @@ do
 
   if [ "$MODE" == "eval" ]; then
     if [[ "$OBJ_NAME" == *"color"* ]]; then
-      bash scripts/train/eval.sh $SUBJECT_NAME $EXP_NAME $HAND_EXP_DIR $OBJECT_EXP_DIR $OBJECT_EXP_NAME $GRASP_PATH $EXP_DIR
+      bash scripts/train/eval_classic.sh $SUBJECT_NAME $EXP_NAME $HAND_EXP_DIR $OBJECT_EXP_DIR $OBJECT_EXP_NAME $GRASP_PATH $EXP_DIR
     else
       echo "Evaluation can't be performed on this object. Please use the color objects!!"
       exit

@@ -1,6 +1,7 @@
 import torch
 from easydict import EasyDict as edict
 from src.modules.base import BaseTrainingModule
+from src.utils.transforms import project_points
 from src.utils.gaussian_utils import render_gaussians, calculate_colors_from_sh, get_cmap, strip_symmetric, get_nocs_colors, get_nocs_grid, covariance_to_scale_rotation
 from src.utils.train_utils import load_models, load_modules, freeze_model
 from src.utils.loss_utils import psnr
@@ -15,6 +16,7 @@ class TrainingModule(BaseTrainingModule):
         self.mode = mode
 
         hand_model_ckpt = find_best_checkpoint(os.path.join('../../../../', self.opts.hand_ckpt_dir))
+        print("Hand model checkpoint:", hand_model_ckpt)
         object_model_ckpt = find_best_checkpoint(os.path.join('../../../../', self.opts.object_ckpt_dir))
 
         self.o_module = load_modules(self.opts.object_module, self.opts, "test", self.opts.object_model,
@@ -48,12 +50,56 @@ class TrainingModule(BaseTrainingModule):
 
     def configure_optimizers(self):
             return self.h_module.model.optimizer
+    
+    def render_skeleton(self, bones_posed, camera, bg_color):
+        heads = bones_posed.heads
+        tails = bones_posed.tails
+
+        def _scalar(value):
+            if isinstance(value, torch.Tensor):
+                return int(value.flatten()[0].item())
+            return int(value)
+
+        height = _scalar(camera.height)
+        width = _scalar(camera.width)
+
+        camera_k = camera.K[0] if isinstance(camera.K, torch.Tensor) and camera.K.dim() == 3 else camera.K
+        camera_extr = (
+            camera.extr[0]
+            if isinstance(camera.extr, torch.Tensor) and camera.extr.dim() == 3
+            else camera.extr
+        )
+
+        image = np.zeros((height, width, 3), dtype=np.uint8)
+
+        projected_heads = project_points(heads[None], camera_k, camera_extr[:3, :4])[0]
+        projected_tails = project_points(tails[None], camera_k, camera_extr[:3, :4])[0]
+
+        projected_heads = to_numpy(projected_heads)
+        projected_tails = to_numpy(projected_tails)
+
+        radius = max(2, min(height, width) // 180)
+        thickness = max(1, radius // 2)
+        color = (0, 255, 0)
+
+        for head, tail in zip(projected_heads, projected_tails):
+            head_xy = tuple(head[:2].astype(np.int32))
+            tail_xy = tuple(tail[:2].astype(np.int32))
+            cv2.line(image, head_xy, tail_xy, color, thickness, lineType=cv2.LINE_AA)
+            cv2.circle(image, head_xy, radius, color, -1, lineType=cv2.LINE_AA)
+            cv2.circle(image, tail_xy, radius, color, -1, lineType=cv2.LINE_AA)
+
+        return to_tensor(image / 255.0, device=heads.device)
+
+    
 
     def forward(self, batch):
         h_out = self.h_module(batch)
         o_out = self.o_module(batch)
         posed_xyz = torch.concat([h_out.posed_xyz, o_out.posed_xyz], dim=0)
-        cov = torch.concat([h_out.posed_cov, o_out.posed_cov], dim=0)
+        # posed_xyz = torch.concat([o_out.posed_xyz], dim=0)
+        o_cov = strip_symmetric(o_out.posed_cov) if o_out.posed_cov.dim() == 3 else o_out.posed_cov
+        cov = torch.concat([h_out.posed_cov, o_cov], dim=0)
         cano_xyz = torch.concat([h_out.cano_xyz, o_out.cano_xyz], dim=0)
         cano_features = torch.concat([h_out.cano_features, o_out.cano_features], dim=0)
         cano_opacity = torch.concat([h_out.cano_opacity, o_out.cano_opacity], dim=0)
@@ -69,9 +115,9 @@ class TrainingModule(BaseTrainingModule):
         cano_amplitude = torch.concat([h_out.cano_amplitude, o_out.cano_amplitude], dim=0)
         cano_phase = torch.concat([h_out.cano_phase, o_out.cano_phase], dim=0)
         cano_offset = torch.concat([h_out.cano_offset, o_out.cano_offset], dim=0)
-
         o_out_tf = attach(torch.eye(4)[None].repeat((o_out.cano_xyz.shape[0], 1, 1)), cov.device)
         tf = torch.concat([h_out.tf, o_out_tf], dim=0)
+
 
         # log_prob = get_gmm(o_out.posed_xyz, h_out.posed_xyz, build_symmetric(h_out.posed_cov), chunk=1024)
         # prob = torch.exp(log_prob)
@@ -79,6 +125,7 @@ class TrainingModule(BaseTrainingModule):
         # colors = get_colors_from_cmap(to_numpy(log_prob), cmap_name='viridis')
         # dump_points(o_out.posed_xyz, 'points.ply', colors*255)
         # breakpoint()
+
 
         pred = {
             "posed_xyz": posed_xyz,
@@ -126,7 +173,6 @@ class TrainingModule(BaseTrainingModule):
 
         elif self.render_contact_type == 'results':
 
-
             rendered = render_gaussians( pred.posed_xyz,
                                         pred.posed_cov,
                                         pred.cano_xyz,
@@ -146,7 +192,9 @@ class TrainingModule(BaseTrainingModule):
 
             rgb_img = rendered['render']
 
-           
+            skeleton_img = self.render_skeleton(batch["bones_posed"], batch["camera"], torch.zeros_like(batch["bg_color"]))
+
+            sklt_img = torch.clamp(rgb_img + skeleton_img, 0, 1)
 
             _, o_cmap = self.render_contacts(pred, batch, batch['camera'], 'object_only')
             h_dist, h_cmap = self.render_contacts(pred, batch, batch['cano_camera'], 'hand_only')
@@ -154,7 +202,8 @@ class TrainingModule(BaseTrainingModule):
             local_h_ac = torch.stack(self.h_ac).sum(axis=0)
             _, acc_h_cmap = self.render_contacts(pred, batch, batch['cano_camera'], 'accumulated', acc_dist=local_h_ac)
 
-            render = torch.cat([rgb_img, h_cmap, o_cmap, acc_h_cmap], dim=1)
+            # render = torch.cat([rgb_img, skeleton_img, h_cmap, o_cmap, acc_h_cmap], dim=1)
+            render = torch.cat([sklt_img, h_cmap, o_cmap, acc_h_cmap], dim=1)
 
 
         elif self.render_contact_type == 'nocs':

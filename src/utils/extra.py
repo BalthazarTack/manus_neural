@@ -201,6 +201,12 @@ def convert_to_batch(object_list):
 
 
 def find_best_checkpoint(check_dir, sort_by="epoch"):  # loss, epoch
+
+    # Prefer last.ckpt if it exists
+    last_checkpoint = os.path.join(check_dir, "last.ckpt")
+    if os.path.isfile(last_checkpoint):
+        return last_checkpoint
+    
     all_checkpoints = glob.glob(os.path.join(check_dir, "*.ckpt"))
 
     if len(all_checkpoints) == 0:

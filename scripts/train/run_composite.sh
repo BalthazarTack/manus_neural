@@ -11,6 +11,7 @@ CONTACT_RENDER_TYPE=$8
 DATA_DIR=$9
 
 if [[ $CONTACT_RENDER_TYPE == "acc_gt_eval" ]]; then
+  DATA_DIR="dataset"
   GRASP_PATH="${DATA_DIR}/${SUBJECT_NAME}/evals/${OBJECT_EXP_NAME}_action/meta_data.pkl"
 #  CAM_PATH="/users/cpokhari/data/users/cpokhari/grasp_data/${SUBJECT_NAME}/calib.evals/optim_params.txt"
   CAM_PATH="${DATA_DIR}/${SUBJECT_NAME}/evals/${OBJECT_EXP_NAME}_action/gt_cam.pkl"

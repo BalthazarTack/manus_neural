@@ -64,7 +64,8 @@ def train(config, mode, ckpt_dir):
                 filename="{epoch:03d}-{step}-{loss:.6f}",
                 save_top_k=-1,
                 mode="min",
-                every_n_epochs=1,
+                every_n_epochs=100,
+                save_last=True,
                 verbose=True
             ),
             LearningRateMonitor(logging_interval='step'),

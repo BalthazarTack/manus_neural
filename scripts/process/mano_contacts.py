@@ -8,7 +8,7 @@ from tqdm import tqdm
 from natsort import natsorted
 
 sys.path.append(os.getcwd())
-from manus.src.utils.gaussian_utils import get_cmap
+from src.utils.gaussian_utils import get_cmap
 from src.utils.vis_util import get_colors_from_cmap
 from src.utils.extra import *
 from src.utils.train_utils import *
@@ -49,10 +49,9 @@ def dump_mano_results(rest_mano, cmap, frame_id, results_dir):
 def main():
     args = get_parser().parse_args()
     grasp_dir = '/'.join(args.grasp_path.split('/')[:-1])
-    root_dir = '/'.join(args.grasp_path.split('/')[:-3])
-
+    root_dir = '/'.join(args.grasp_path.split('/')[:-4])
     exp_root_dir = '/'.join(args.exp_dir.split('/')[:-4])
-
+    print("GRASP_DIR",grasp_dir)
     # object_ckpt_dir = os.path.join(exp_root_dir, 'object', args.subject_name, args.object_exp_name,
     #                                "checkpoints")
 
@@ -68,12 +67,12 @@ def main():
 
     if args.harp:
         mano_rest_path = \
-            glob.glob(os.path.join(root_dir, "evals", f'{args.object_exp_name}_action', "harp/*", "*.obj"))[0]
+            glob.glob(os.path.join(root_dir, args.subject_name, "evals", f'{args.object_exp_name}_action', "harp/*", "*.obj"))[0]
     else:
         if args.results:
             mano_rest_path = os.path.join(root_dir, "mano_rest.ply")
         else:
-            mano_rest_path = glob.glob(os.path.join(root_dir, "evals", f'{args.object_exp_name}_action',  "mano/mesh", "*[!_kp].ply"))[0]
+            mano_rest_path = glob.glob(os.path.join(root_dir, args.subject_name, "evals", f'{args.object_exp_name}_action',  "mano/mesh", "*[!_kp].ply"))[0]
 
     mano_rest = trimesh.load(mano_rest_path, process=False, maintain_order=True)
 
@@ -89,6 +88,7 @@ def main():
     cmap_type = 'plasma' if args.results else 'gray'
 
     acc_dist = []
+    print(all_mano_files)
     for path in tqdm(all_mano_files):
         if args.harp:
             frame_id = int(path.split('/')[-2])
@@ -114,10 +114,10 @@ def main():
         render_type = 'canonical'
         params_path = "./data/camera_paths/cano_camera.pkl"
     else:
-        params_path = os.path.join(root_dir, "evals", f'{args.object_exp_name}_action', "gt_cam.pkl")
+        params_path = os.path.join(root_dir, args.subject_name, "evals", f'{args.object_exp_name}_action', "gt_cam.pkl")
         # params_path = os.path.join(root_dir, "calib.evals", "optim_params.txt")
         render_type = 'gt_eval'
-        blend_file = os.path.join(root_dir, "evals", f'{args.object_exp_name}_action', "gt_cam.blend")
+        blend_file = os.path.join(root_dir, args.subject_name, "evals", f'{args.object_exp_name}_action', "gt_cam.blend")
 
     cmd_path = f'bash scripts/render_mano.sh {acc_results_dir} {render_type} {params_path} {blend_file}'
     os.system(cmd_path)

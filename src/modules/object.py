@@ -54,6 +54,10 @@ class TrainingModule(BaseTrainingModule):
             "cano_amplitude": self.model.get_amplitudes,
             "cano_phase": self.model.get_phases,
             "cano_offset": self.model.get_offsets,
+            "frequencies_color": self.model.get_frequencies_color,
+            "phases_color": self.model.get_phases_color,
+            "amplitudes_color": self.model.get_amplitudes_color,
+            "offsets_color": self.model.get_offsets_color,
             "tf": None,
         }
         return edict(pred)
@@ -72,6 +76,10 @@ class TrainingModule(BaseTrainingModule):
             pred.cano_amplitude,
             pred.cano_phase,
             pred.cano_offset,
+            pred.frequencies_color,
+            pred.phases_color,
+            pred.amplitudes_color,
+            pred.offsets_color,
             batch["camera"],
             batch["bg_color"],
             sh_degree=3,
